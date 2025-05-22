@@ -1,0 +1,378 @@
+---
+title: "Custom Decision Tree"
+author: 'Adam Hunt'
+date: "2025-01-14"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(knitr)
+library(ggplot2)
+library(reshape2)
+library(dplyr)
+library(broom)
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+# Abstract
+
+This project compares a custom built decision tree with sklearn library's decision tree model. The analysis focused on four key metrics accuracy, tree depth, number of nodes and training time. Three datasets were used for the analysis. These were the Iris dataset, the Breast Cancer Wisconsin dataset and a subset of the Covertype dataset. Results from this analysis reveal that while both implementation produce decision trees achieving moderate to strong accuracy, the sklearn model consistently outperforms both in terms of accuracy and training time. This is particularly evident in larger datasets.
+
+My custom decision tree used Gini impurity and the median for threshold selection which simplified the calculations but resulted in less optimal splits. In contrast, sklearn's model was configured to use Entropy and evaluated all unique threshold features resulting in better splits.  These differences highlighted the difficulty in creating a decision tree from scratch and the benefit of using a library implementation.
+
+Future analysis may look to explore comparing a custom implementation with sklearn's implementation using the same splitting criteria and threshold selection. Further, evaluating and comparing these two implementations on a larger, more diverse dataset may reveal more interesting insights with regards to scalability. 
+
+# Introduction
+
+"Decision trees are nonlinear graphical models that have found important applications in machine learning mainly due to their interpretability" (Zollanvari, 2023). Scikit learn's (sklearn) decision tree offers an excellent tool for general decision tree applications. However, its flexibility and customisability is limited to the framework of the library. Therefore an entirely custom implementation may offer benefits particularly in specialised areas such as medicine (Podgorelec et al., 2002).
+
+This report aims to analyse the performance of a custom decision tree implementation compared to sklearn's. The analysis focuses on metrics such as accuracy, precision, recall, runtime, tree depth and number of nodes across three datasets. First the Iris dataset, a small dataset of 150 instances and four features was tested, with the goal of classifying Iris flowers into 1 of 3 species. Next, the Breast Cancer Wisconsin (WDBC) Dataset was used, a slightly larger dataset of 569 instances and 30 features with the goal of predicting whether a tumour is malignant or benign. Finally, the Covertype dataset was tested, a much larger dataset of 581012 instances and 54 features with the goal of classifying each instance of forest cover type into 1 of 7 categories. Limited preprocessing was required for these datasets given none had missing data although for the Covertype dataset a random sample of 10% was chosen to ensure computational feasability.
+
+# Methododology
+
+## sklearn
+
+As mentioned previously, scikit learn provides a model (DecsionTreeClassifier) for building decision trees. Their model splits the dataset into subsets based on the most significant feature at each node and continues the process recursively until it is determined that further splitting doesn't improve the model. Various parameters can be adjusted such as its splitting criterion (its default being Gini), splitting strategy at each node, maximum tree depth and minimum sample split. Once trained, the model can predict the class of samples by navigating the tree according to their feature values and reaching a leaf node that specifies the assigned class (Scikit-learn developers, 2025). 
+
+## My custom implementation
+
+My custom decision tree implementation works by first defining a node class to represent each point in the tree. A split_data function is then defined which divides the dataset into two groups based on a given feature and threshold. Next a gini_impurity function is used to calculate the gini impurity which measures the level of class diversity in a group of samples. To find the best split a find_best_split function is defined that calculates the median value for each feature which is used as a threshold and evaluates the split using the gini_impurity function. A weighted Gini impurity is calculated and the split with the lowest impurity is selected as best. The build_tree function is next defined which recursively builds the tree. For each node it stops based on conditions such as reaching maximum depth or having too few samples or reaching class purity. If one of these conditions is not met then the function uses the find_best_split function to identify the next feature and threshold for splitting. It then splits the data and creates child nodes. Finally the predict function is defined which is used for making predictions with the defined tree.
+
+## Key differences
+
+The sklearn implementation differs from my implementation in some key areas. The sklearn implementation allows a choice of criterion between Gini and entropy whereas mine always uses Gini impurity to evaluate splits. To create some contrast and discover if any significant statistical differences emerge, I have chosen to specify the use of entropy for the sklearn implementation. Another key difference is in threshold selection. My implementation always uses the median of feature values as the threshold whereas the sklearn implementation evaluates all unique feature values in the dataset as potential thresholds for splitting (Scikit-learn developers, 2025). This theoretically should result in better splits but will be more computationally intensive. Again it will be interesting to see if any statistically significant differences emerge as a result of this.
+
+## Performance metrics gathered
+
+In order to gain an understanding of how well these two decision trees perform and to thoroughly compare the two implementations various performance metrics have been collected for analysis. These are, accuracy, precision, recall, tree depth, number of nodes, train time and memory usage.
+
+```{r load-data}
+# Load datasets
+df_iris <- read_csv("performance_data_iris.csv")
+df_wdbc <- read_csv("performance_data_wdbc.csv")
+df_covertype <- read_csv("performance_data_covertype.csv")
+```
+
+# Results
+
+## Initial Exploratory Data Analysis
+
+Before doing any deeper analysis, it is useful to get an overview of the data by calculating some basic statistics. The below tables show the mean and standard deviations for my tree and the sklearn implementation across all three datasets for the above mentioned performance metrics.
+
+```{r}
+# Create a summary table for accuracy
+accuracy_summary <- data.frame(
+  Dataset = c("Iris", "WDBC", "Covertype"),
+  my_tree_mean = c(mean(df_iris$my_tree_accuracy), mean(df_wdbc$my_tree_accuracy), mean(df_covertype$my_tree_accuracy)),
+  my_tree_sd = c(sd(df_iris$my_tree_accuracy), sd(df_wdbc$my_tree_accuracy), sd(df_covertype$my_tree_accuracy)),
+  sk_mean = c(mean(df_iris$sklearn_accuracy), mean(df_wdbc$sklearn_accuracy), mean(df_covertype$sklearn_accuracy)),
+  sk_sd = c(sd(df_iris$sklearn_accuracy), sd(df_wdbc$sklearn_accuracy), sd(df_covertype$sklearn_accuracy)))
+kable(accuracy_summary, caption = "Summary of Accuracy Metrics")
+
+# Create a summary table for precision
+precision_summary <- data.frame(
+  Dataset = c("Iris", "WDBC", "Covertype"),
+  my_tree_mean = c(mean(df_iris$my_tree_precision), mean(df_wdbc$my_tree_precision), mean(df_covertype$my_tree_precision)),
+  my_tree_sd = c(sd(df_iris$my_tree_precision), sd(df_wdbc$my_tree_precision), sd(df_covertype$my_tree_precision)),
+  sk_mean = c(mean(df_iris$sklearn_precision), mean(df_wdbc$sklearn_precision), mean(df_covertype$sklearn_precision)),
+  sk_sd = c(sd(df_iris$sklearn_precision), sd(df_wdbc$sklearn_precision), sd(df_covertype$sklearn_precision)))
+kable(precision_summary, caption = "Summary of Precision Metrics")
+
+# Create a summary table for recall
+recall_summary <- data.frame(
+  Dataset = c("Iris", "WDBC", "Covertype"),
+  my_tree_mean = c(mean(df_iris$my_tree_recall), mean(df_wdbc$my_tree_recall), mean(df_covertype$my_tree_recall)),
+  my_tree_sd = c(sd(df_iris$my_tree_recall), sd(df_wdbc$my_tree_recall), sd(df_covertype$my_tree_recall)),
+  sk_mean = c(mean(df_iris$sklearn_recall), mean(df_wdbc$sklearn_recall), mean(df_covertype$sklearn_recall)),
+  sk_sd = c(sd(df_iris$sklearn_recall), sd(df_wdbc$sklearn_recall), sd(df_covertype$sklearn_recall)))
+kable(recall_summary, caption = "Summary of Recall Metrics")
+
+# Create a summary table for tree depth
+depth_summary <- data.frame(
+  Dataset = c("Iris", "WDBC", "Covertype"),
+  my_tree_mean = c(mean(df_iris$my_tree_depth), mean(df_wdbc$my_tree_depth), mean(df_covertype$my_tree_depth)),
+  my_tree_sd = c(sd(df_iris$my_tree_depth), sd(df_wdbc$my_tree_depth), sd(df_covertype$my_tree_depth)),
+  sk_mean = c(mean(df_iris$sklearn_tree_depth), mean(df_wdbc$sklearn_tree_depth), mean(df_covertype$sklearn_tree_depth)),
+  sk_sd = c(sd(df_iris$sklearn_tree_depth), sd(df_wdbc$sklearn_tree_depth), sd(df_covertype$sklearn_tree_depth)))
+kable(depth_summary, caption = "Summary of Tree Depth Metrics")
+
+# Create a summary table for number of nodes
+nodes_summary <- data.frame(
+  Dataset = c("Iris", "WDBC", "Covertype"),
+  my_tree_mean = c(mean(df_iris$my_tree_num_nodes), mean(df_wdbc$my_tree_num_nodes), mean(df_covertype$my_tree_num_nodes)),
+  my_tree_sd = c(sd(df_iris$my_tree_num_nodes), sd(df_wdbc$my_tree_num_nodes), sd(df_covertype$my_tree_num_nodes)),
+  sk_mean = c(mean(df_iris$sklearn_num_nodes), mean(df_wdbc$sklearn_num_nodes), mean(df_covertype$sklearn_num_nodes)),
+  sk_sd = c(sd(df_iris$sklearn_num_nodes), sd(df_wdbc$sklearn_num_nodes), sd(df_covertype$sklearn_num_nodes)))
+kable(nodes_summary, caption = "Summary of Number of Nodes Metrics")
+
+# Create a summary table for train time
+train_time_summary <- data.frame(
+  Dataset = c("Iris", "WDBC", "Covertype"),
+  my_tree_mean = c(mean(df_iris$my_tree_training_time), mean(df_wdbc$my_tree_training_time), mean(df_covertype$my_tree_training_time)),
+  my_tree_sd = c(sd(df_iris$my_tree_training_time), sd(df_wdbc$my_tree_training_time), sd(df_covertype$my_tree_training_time)),
+  sk_mean = c(mean(df_iris$sklearn_training_time), mean(df_wdbc$sklearn_training_time), mean(df_covertype$sklearn_training_time)),
+  sk_sd = c(sd(df_iris$sklearn_training_time), sd(df_wdbc$sklearn_training_time), sd(df_covertype$sklearn_training_time)))
+kable(train_time_summary, caption = "Summary of Train Time Metrics")
+
+# Create a summary table for memory usage
+memory_summary <- data.frame(
+  Dataset = c("Iris", "WDBC", "Covertype"),
+  my_tree_mean = c(mean(df_iris$my_memory_usage), mean(df_wdbc$my_memory_usage), mean(df_covertype$my_memory_usage)),
+  my_tree_sd = c(sd(df_iris$my_memory_usage), sd(df_wdbc$my_memory_usage), sd(df_covertype$my_memory_usage)),
+  sk_mean = c(mean(df_iris$sklearn_memory_usage), mean(df_wdbc$sklearn_memory_usage), mean(df_covertype$sklearn_memory_usage)),
+  sk_sd = c(sd(df_iris$sklearn_memory_usage), sd(df_wdbc$sklearn_memory_usage), sd(df_covertype$sklearn_memory_usage)))
+kable(memory_summary, caption = "Summary of Memory Usage Metrics")
+```
+Looking at these tables we see some clear trends. Table 1, table 2 and table 3 clearly shows that the sklearn implementation consistently achieves a higher mean accuracy, precision and recall with a lower standard deviation in all datasets when compared with my decision tree. The suggests better and more consistent performance. Table 4 suggests my decision tree produces deeper trees for the Iris and WDBC datasets although the differences are very small compared to other metrics and for the Covertype dataset they become almost identical. Table 5 shows my custom trees have significantly more nodes on average possibly indicating less efficient tree structures. Table 6 indicates substationally faster training times for the sklearn implementation on average. Table 7 shows no meaningful differences in memory usage for both implementations and therefore this metric will be removed from further analysis. 
+
+```{r}
+# Remove memory usage columns from all datasets
+df_iris <- df_iris %>% select(-my_memory_usage, -sklearn_memory_usage)
+df_wdbc <- df_wdbc %>% select(-my_memory_usage, -sklearn_memory_usage)
+df_covertype <- df_covertype %>% select(-my_memory_usage, -sklearn_memory_usage)
+```
+
+## ANOVA Analysis
+
+Following the initial exploratory analysis it is also useful to to see if there are any statistically significant differences between the the 3 datasets. To do this I have focused on two performance metrics, accuracy and train time.
+
+### Accuracy
+
+```{r}
+# Combine datasets
+accuracy_data <- data.frame(
+  Dataset = rep(c("Iris", "WDBC", "Covertype"), each = nrow(df_iris)),
+  Accuracy = c(df_iris$my_tree_accuracy, df_wdbc$my_tree_accuracy, df_covertype$my_tree_accuracy))
+
+# Run ANOVA
+accuracy_anova <- aov(Accuracy ~ Dataset, data = accuracy_data)
+summary(accuracy_anova)
+
+# Boxplot for Accuracy
+ggplot(accuracy_data, aes(x = Dataset, y = Accuracy)) +
+  geom_boxplot(fill = "blue") +
+  labs(title = "Accuracy by Dataset", x = "Dataset", y = "Accuracy") +
+  theme_minimal()
+```
+
+The ANOVA results for accuracy demonstrate that there are statistically significant differences between the 3 datasets with a p-value of <2e-16. Further, the very large F-value of 329.7 indicates that the variation in accuracy between the datasets is much greater than the variation within the datasets. The boxplot visually supports this with the WDBC dataset having the highest median accuracy but a small distribution. Covertype shows a slightly lower median and a slightly larger spread, while the Iris dataset has the lowest median and by far the widest spread. Overall this provides clear evidence that dataset characteristics have a significant role in influencing model accuracy.   
+
+### Training time
+
+```{r}
+# Combine datasets
+traintime_data <- data.frame(
+  Dataset = rep(c("Iris", "WDBC", "Covertype"), each = nrow(df_iris)),
+  Traintime = c(df_iris$my_tree_training_time, df_wdbc$my_tree_training_time, df_covertype$my_tree_training_time))
+
+# Run ANOVA
+traintime_anova <- aov(Traintime ~ Dataset, data = traintime_data)
+summary(traintime_anova)
+
+# Boxplot for Training Time
+ggplot(traintime_data, aes(x = Dataset, y = Traintime)) +
+  geom_boxplot(fill = "green") +
+  labs(title = "Training Time by Dataset", x = "Dataset", y = "Training Time") +
+  theme_minimal()
+```
+
+Similar to the results of the ANOVA analysis on accuracy between datasets, these ANOVA results above reveal the statistically significant impact of the dataset on training time with a p-value of <2e-16. An F-value of 659.2 is again very large and indicates that variation between datasets is much greater than the variation within the datasets. The boxplot supports this and reveals some interesting insights. Covertype shows the highest median training time, the widest spread and several outliers above the whiskers. But in contrast the Iris and WDBC datasets have very small training times and almost no variability in this. This suggests dataset size is a key factor influencing training time.   
+
+The ANOVA results for both accuracy and training time reveal significant differences between the datasets and in particular Covertype demonstrates distinct characteristics. This, along with the fact that Covertype is much larger leads me to believe it is better to continue the analysis only using metrics from the Covertype dataset. By focusing on this dataset its ensures that this analysis focuses on discovering differences between the decision tree implementations rather than being influenced by variability between the datasets.   
+
+## Correlation Analysis
+
+To gain a greater understanding of the relationship between metrics I have produced correlation heatmaps for both my decision tree and the sklearn implementation. These heatmaps were produced using the accuracy, precision, recall, tree depth, number of nodes and training time metrics using the Covertype dataset.
+
+```{r}
+# Select relevant columns
+selected_data <- df_covertype[, c("my_tree_accuracy", "my_tree_precision", "my_tree_recall", 
+                                  "my_tree_depth", "my_tree_num_nodes", "my_tree_training_time")]
+
+# Compute the correlation matrix
+correlation_matrix <- cor(selected_data)
+
+# Melt the correlation matrix into long format for ggplot2
+melted_corr <- melt(correlation_matrix)
+
+# Create the heatmap
+ggplot(melted_corr, aes(Var1, Var2, fill = value)) +
+  geom_tile() +  
+  geom_text(aes(label = round(value, 2)), size = 4) +  
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) + 
+  labs(title = "Correlation Heatmap For My Decision Tree", x = "", y = "")
+```
+
+```{r}
+# Select relevant columns for sklearn metrics
+selected_data <- df_covertype[, c("sklearn_accuracy", "sklearn_precision", "sklearn_recall", 
+                                  "sklearn_tree_depth", "sklearn_num_nodes", "sklearn_training_time")]
+
+# Compute the correlation matrix
+correlation_matrix <- cor(selected_data)
+
+# Melt the correlation matrix into long format for ggplot2
+melted_corr <- melt(correlation_matrix)
+
+# Create the heatmap
+ggplot(melted_corr, aes(Var1, Var2, fill = value)) +
+  geom_tile() +  
+  geom_text(aes(label = round(value, 2)), size = 4) +  
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", midpoint = 0) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1)) + 
+  labs(title = "Correlation Heatmap For Sklearn Decision Tree", x = "", y = "")
+
+```
+
+The correlation heatmaps in both implementations show similar patterns in the relationships between the metrics. In both implementations the 3 performance metrics accuracy, precision and recall show extremely high correlations (all above 0.9). In particular, in the sklearn implementation these three metrics show nearly perfect correlations (all above 0.99). This indicates that that these three metrics capture a lot of the same information and characteristics of the performance of these models. Therefore I have decided to drop precision and recall from future analysis and rely on accuracy as the primary performance metric moving forward.
+
+There is a slight difference in the relationship between the tree structure and performance metrics between the two implementations. For my decision tree, tree depth shows a strong correlation with accuracy (0.84) but the sklearn implementation shows a slightly higher correlation (0.87) suggesting tree depth has a slightly bigger impact on accuracy for the sklearn implementation than mine. Further the number of nodes is strongly correlated with training time in both implementations but more strongly correlated in my implementation (0.87) than sklearn's implementation (0.77). This indicates differences in how tree complexity impacts computational performance for both models and we can see that for the sklearn model, training time is slightly more weakly correlated to the other metrics than is the case in my decision tree. This could have possible implications for factors like scalability.
+
+```{r}
+# Remove recall and precision columns from Covertype dataset
+df_covertype <- df_covertype %>% select(-my_tree_recall, -my_tree_precision, -sklearn_recall, -sklearn_precision)
+```
+
+
+## T-tests
+
+The remaining 4 metrics being considered for analysis are accuracy, tree depth, number of nodes and training time. To gain further confidence that the observed differences in the means of these metrics are statistically significant I have decided to utilise paired T-tests.
+
+```{r}
+# Accuracy Comparison
+accuracy_t_covertype <- t.test(df_covertype$my_tree_accuracy, df_covertype$sklearn_accuracy, paired = TRUE)
+# Print result
+accuracy_t_covertype
+
+# Precision Comparison
+depth_t_covertype <- t.test(df_covertype$my_tree_depth, df_covertype$sklearn_tree_depth, paired = TRUE)
+# Print result
+depth_t_covertype
+
+# Recall Comparison
+num_nodes_t_covertype <- t.test(df_covertype$my_tree_num_nodes, df_covertype$sklearn_num_nodes, paired = TRUE)
+# Print result
+num_nodes_t_covertype
+
+# Train Time Comparison
+train_time_t_covertype <- t.test(df_covertype$my_tree_training_time, df_covertype$sklearn_training_time, paired = TRUE)
+# Print result
+train_time_t_covertype
+```
+These T-tests revealed statistically significant differences between my decision tree and sklearn's implementation. The sklearn implementation consistently outperforms my tree with a mean difference in accuracy of -0.02585011 and a 95% confidence interval ranging from -0.02794711 to -0.02375311. This indicates that there is a small but significant difference.  For tree structure, my tree tends to produce deeper trees with a mean difference in depth of -0.1166667. Further my tree produces significantly higher number of nodes, with a mean difference of 157.9875. Given we have previously seen that deeper trees and more nodes is highly correlated to training time, it is likely that these two factors have contributed to my trees significantly longer training time. On average it is 1.268398 seconds longer. From this, the implication is that while my tree seems to favour more complex trees, the sklearn implementation is capable of producing similar or better results far more efficiently.  
+
+## Linear regression
+
+In order to gain an understanding of what is influencing the accuracy and training time for my implementation and the sklearn model, I will use linear regression analysis. By modelling the relationship between these two response variables and the key predictors (dataset size, tree depth, and number of nodes), we can identify factors that are most influential in accuracy and computational efficiency. 
+
+### Accuracy
+
+```{r}
+# Accuracy for my tree
+model_my_accuracy <- lm(my_tree_accuracy ~ dataset_size + my_tree_depth + my_tree_num_nodes, data = df_covertype)
+
+# Accuracy for sklearn tree
+model_sklearn_accuracy <- lm(sklearn_accuracy ~ dataset_size + sklearn_tree_depth + sklearn_num_nodes, data = df_covertype)
+
+summary(model_my_accuracy)
+summary(model_sklearn_accuracy)
+```
+
+```{r}
+# Combine coefficients for both models and remove intercept
+coef_accuracy <- bind_rows(
+  tidy(model_my_accuracy) %>% mutate(Model = "My Tree"),
+  tidy(model_sklearn_accuracy) %>% mutate(Model = "Sklearn")) %>%
+  
+  filter(term != "(Intercept)") %>%
+  mutate(term = case_when(
+    str_detect(term, "tree_depth") ~ "Tree Depth",
+    str_detect(term, "num_nodes") ~ "Number of Nodes",
+    str_detect(term, "dataset_size") ~ "Dataset Size",
+    TRUE ~ term))
+
+# Plot grouped bar chart
+ggplot(coef_accuracy, aes(x = term, y = estimate, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Coefficient Estimates for Accuracy Models",
+       x = "Predictors", y = "Coefficient Estimate")
+```
+The linear regressions models for accuracy demonstrate that all predictors are statistically significant. The models demonstrate that both implementations have improved accuracy with greater tree depth and this is the strongest predictor of accuracy among the predictors. The sklearn model shows slightly higher sensitivity to this predictor and this can be visibly seen in the bar chart above as well as with the slightly larger coefficient of 0.00826 compared with my implementation's 0.00766. The contribution of number of nodes to accuracy while positive, is minimal with coefficients close to zero. Conversely, both my implementation and sklearn's implementation show dataset size negatively impacts accuracy with the sklearn model showing a slightly larger impact. However, again as demonstrated on the bar chart the impact of this is minimal. Finally, the sklearn accuracy model achieves a slightly higher R squared value of 0.8651 in comparison to my decision trees accuracy model of 0.8355. This indicates that the predictors explained a larger proportion of the variance in accuracy. 
+
+### Training time
+
+```{r}
+# Training time for my tree
+model_my_training_time <- lm(my_tree_training_time ~ dataset_size + my_tree_depth + my_tree_num_nodes, data = df_covertype)
+
+# Training time for sklearn tree
+model_sklearn_training_time <- lm(sklearn_training_time ~ dataset_size + sklearn_tree_depth + sklearn_num_nodes, data = df_covertype)
+
+summary(model_my_training_time)
+summary(model_sklearn_training_time)
+```
+
+
+```{r}
+# Combine coefficients for both models and remove intercept
+coef_training <- bind_rows(
+  tidy(model_my_training_time) %>% mutate(Model = "My Tree"),
+  tidy(model_sklearn_training_time) %>% mutate(Model = "Sklearn")) %>%
+  
+  filter(term != "(Intercept)") %>%
+  mutate(term = case_when(
+    str_detect(term, "tree_depth") ~ "Tree Depth",
+    str_detect(term, "num_nodes") ~ "Number of Nodes",
+    str_detect(term, "dataset_size") ~ "Dataset Size",
+    TRUE ~ term))
+
+# Plot grouped bar chart
+ggplot(coef_training, aes(x = term, y = estimate, fill = Model)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_minimal() +
+  labs(title = "Coefficient Estimates for Training Time Models",
+       x = "Predictors", y = "Coefficient Estimate")
+```
+For training time, we can see again that all predictors are statistically significant. Both models have increased training times when the dataset size increases. However, we can see that my decision tree experiences a significantly larger increase in time than the sklearn implementation as demonstrated by a larger coefficient of 0.0001494 compared with the sklearn implementation's 0.000003324. Similarly, number of nodes contributes to an increase in training time for both models and again we see that my implementation sees a larger increase in training time in comparison to the sklearn implementation. The big outlier is the results for the impact of tree depth on training time which can be clearly seen from the bar chart. Tree depth has a substantial impact on the training time of my model with a coefficient of 0.0602. In contrast tree depth has minimal impact on the training time of the sklearn model with a much lower coefficient of 0.0011.
+
+Overall, this regression analysis highlights that the sklearn implementation demonstrates far better scalability and efficiency in comparison to my implementation. It managed to achieve better accuracy, with smaller training times while my decision tree demonstrated far inferior efficiency particularly as dataset size and tree depth increased.
+
+# Discussion
+
+The above results indicate that while both of these implementations successfully construct decision trees and both demonstrate moderate to strong accuracy on the tested datasets, the sklearn implementation consistently achieves greater efficiency and accuracy. This was particularly evident when focusing the analysis on the Covertype dataset, where the larger size made the differences in scalability and computational performance much more obvious to see.
+
+The far better efficiency and accuracy of the sklearn decision tree makes it a much better option for practical applications. This is especially true when working with very large datasets or with limited computational resources. I will also note that my implementation's deeper tree structure and higher node count does suggest it may be more likely to overfit data. However, this could suit some specialised applications where greater interpretability is required.
+
+The gap in performance between the two decision trees could be attributed to multiple areas. One key area is the use of the median of the feature values at each node as the threshold for splitting in my decision tree. In contrast, sklearn evaluates all unique features values as potential thresholds (Scikit-learn developers, 2025) meaning for every possible threshold, sklearn calculates how good the split would be (in this case using entropy) and then selects the threshold that results in the best split. This will likely explain a lot of the increase in performance. A second key difference is the choice of criterion for measuring the purity of a split. The sklearn implementation was configured to use Entropy whereas my implementation uses Gini. Gini criterion is generally much faster and less computationally expensive. However, Entropy can often obtain results that are slightly better although the difference is often minimal (Aznar, 2020). In our case, sklearn using entropy was both faster and more accurate. Entropy may explain a small amount of the greater accuracy but actually this suggests that if sklearn had been allowed to use Gini, sklearn may have outperformed on training time even further. 
+
+The fact that sklearn used Entropy and my decision tree used Gini highlights a limitation in this analysis. We can't be sure how much of an impact on accuracy and training time the use of different criterion has had. A similar case can be made for the use of median of the feature values in my implementation. Using a similar method as sklearn for threshold evaluation will have allowed for a more comprehensive comparison. Additionally while Covertype is a large dataset, only 10% was used for this analysis and the Iris and the Breast Cancer Wisconsin datasets are very small limiting our ability to evaluate how the models scale.
+
+To create a more comprehensive study, future analysis could be done on a custom implementation that evaluates splits in the same way as the sklearn implementation. Further, analysis could be done on sklearn using its default criterion of Gini to see if that makes any meaningful impact on its accuracy and efficiency. Additionally, Using the full Covertype dataset or an even larger dataset may reveal even more differences in the scalability of the two implementations.
+
+# Conclusion
+
+This project compared a custom decision tree implementation with the sklearn library decision tree. The analysis highlighted that while both implementations achieved moderate to strong accuracy, sklearn consistently outperformed in terms of both accuracy and also efficiency. The differences become most obvious in the larger dataset, suggesting the sklearn implementation has far better scalability. Consequently, the sklearn implementation is by far the better option for the vast majority of use cases. However, the custom implementation's deeper trees and high node counts could offer advantages in situations where greater interpretability and customisability is required. It should be noted that this is not a perfect comparison as there are key differences in the implementations that likely have a substantial impact on accuracy and training time. These include criterion and threshold selection methods. Future analysis could explore ways to improve the scalability and efficiency of my decision tree. Further, using a splitting criteria and threshold selection method that is consistent between the two methods compared would enable a more comprehensive comparison. Finally, testing both implementations on larger and more diverse datasets could reveal more useful insights into scalability, accuracy and efficiency. Building this custom implementation offered insights into the challenges of building decision trees and the value of library implementations particularly in use with larger datasets.         
+
+\newpage
+
+# Bibliography
+
+- Aznar, P. (2020) Decision trees: Gini vs entropy *Quantdare*, Quantdare. Available at: https://quantdare.com/decision-trees-gini-vs-entropy/ (Accessed: 16 January 2025).
+- Blackard, J. (1998) Covertype, UCI Machine Learning Repository. Available at: https://archive.ics.uci.edu/dataset/31/covertype (Accessed: 15 January 2025).
+- Enozeren (2024) Building a decision tree from scratch with python, Medium. Available at: https://medium.com/@enozeren/building-a-decision-tree-from-scratch-324b9a5ed836 (Accessed: 06 January 2025).
+- UmarSunny (2024) Decision Tree algorithm from 0, *Medium*. Available at: https://medium.com/@umarsunny2011/decision-tree-algorithm-from-0-ab6b0eccf954 (Accessed: 06 January 2025).
+- Murdyantoro, B. (2023) Building decision tree algorithm from scratch in Python, *Medium*. Available at: https://medium.com/@bagusmurdyantoro1997/building-decision-tree-algorithm-from-scratch-in-python-4adc26ba1b57 (Accessed: 06 January 2025).
+- Fisher, R. (1936) Iris, UCI Machine Learning Repository. Available at: https://archive.ics.uci.edu/dataset/53/iris (Accessed: 15 January 2025).
+- Podgorelec, V. et al. (2002) 'Decision Trees: An Overview and Their Use in Medicine', *Journal of Medical Systems*, 26(5), pp. 445–463. doi:10.1023/a:1016409317640.
+- Robinson, D., Hayes, A. and Couch, S. (2025) Convert statistical objects into Tidy Tibbles. Available at: https://broom.tidymodels.org/ (Accessed: 16 January 2025).
+- Scikit-learn developers (2025) DecisionTreeClassifier, scikit-learn: Machine learning in Python. Available at: https://scikit-learn.org/dev/modules/generated/sklearn.tree.DecisionTreeClassifier.html (Accessed: 15 January 2025).
+- STHDA (2025) GGPLOT2: Quick correlation matrix heatmap - R software and Data Visualization. Available at: https://www.sthda.com/english/wiki/ggplot2-quick-correlation-matrix-heatmap-r-software-and-data-visualization (Accessed: 16 January 2025).
+- Wolberg, W. et al. (1993) Breast cancer Wisconsin (Diagnostic), UCI Machine Learning Repository. Available at: https://archive.ics.uci.edu/dataset/17/breast+cancer+wisconsin+diagnostic (Accessed: 15 January 2025).
+- Zollanvari, A. (2023) *Machine learning with Python: Theory and Implementation*. Cham: Springer.
+- Pytest-dev team (2015) Pytest Get started, *Get Started - pytest documentation*. Available at: https://docs.pytest.org/en/7.2.x/getting-started.html (Accessed: 17 January 2025).
